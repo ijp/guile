@@ -1155,7 +1155,16 @@
                      ((_ name val)
                       (id? #'name)
                       (values 'define-syntax-form #'name
-                              #'val w s mod))))
+                              #'val w s mod))
+                     ((_ (name . args) e1 e2 ...)
+                      (and (id? #'name)
+                           (valid-bound-ids? (lambda-var-list #'args)))
+                      ;; need lambda here...
+                      (values 'define-syntax-form (wrap #'name w mod)
+                              (decorate-source
+                               (cons #'lambda (wrap #'(args e1 e2 ...) w mod))
+                               s)
+                              empty-wrap s mod))))
                   (else
                    (values 'call #f e w s mod)))))))
          ((syntax-object? e)
