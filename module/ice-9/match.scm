@@ -52,7 +52,7 @@
 ;; `match' doesn't support clauses of the form `(pat => exp)'.
 
 ;; Unmodified public domain code by Alex Shinn retrieved from
-;; the Chibi-Scheme repository, commit 833:6daa2971f3fe.
+;; the Chibi-Scheme repository, commit 876:528cdab3f818.
 ;;
 ;; Note: Make sure to update `match.test.upstream' when updating this
 ;; file.
