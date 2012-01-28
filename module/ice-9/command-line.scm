@@ -183,7 +183,8 @@ If FILE begins with `-' the -s switch is mandatory.
         (interactive? #t)
         (inhibit-user-init? #f)
         (turn-on-debugging? #f)
-        (turn-off-debugging? #f))
+        (turn-off-debugging? #f)
+        (turn-off-warnings? #f))
 
     (define (error fmt . args)
       (apply shell-usage usage-name #t fmt args))
@@ -361,6 +362,10 @@ If FILE begins with `-' the -s switch is mandatory.
                          (assq-ref %guile-build-info 'packager-version))
             (exit 0))
 
+           ((string=? arg "--no-warnings")
+            (set! turn-off-warnings? #t)
+            (parse args out))
+
            (else
             (error "Unrecognized switch ~a" arg)))))))
 
@@ -386,6 +391,9 @@ If FILE begins with `-' the -s switch is mandatory.
         ;; default-prompt-handler is nontrivial.
         (@ (ice-9 control) %)
         (begin
+          ,@(if turn-off-warnings?
+                '((current-warning-port (%make-void-port "w")))
+                '())
           ;; If we didn't end with a -c or a -s and didn't supply a -q, load
           ;; the user's customization file.
           ,@(if (and interactive? (not inhibit-user-init?))
