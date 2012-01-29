@@ -1,6 +1,5 @@
-/* Copyright (C) 2001, 2008, 2009, 2010, 2011,
- *   2012 Free Software Foundation, Inc.
- *
+/* Copyright (C) 2001,2008,2009,2010,2011 Free Software Foundation, Inc.
+ * 
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
  * as published by the Free Software Foundation; either version 3 of
@@ -19,17 +18,6 @@
 
 
 /* This file is included in vm_engine.c */
-
-/* Compiler barrier, to prevent instruction reordering, apparently due
-   to a bug in GCC 4.3.2 on sparc-linux-gnu and on hppa2.0-linux-gnu.
-   See <http://bugs.gnu.org/10520>, for details.  */
-
-#ifdef __GNUC__
-# define COMPILER_BARRIER  __asm__ __volatile__ ("")
-#else
-# define COMPILER_BARRIER  do { } while (0)
-#endif
-
 
 
 /*
@@ -67,7 +55,6 @@ VM_DEFINE_INSTRUCTION (1, halt, "halt", 0, 0, 0)
        stack */
     ip = SCM_FRAME_RETURN_ADDRESS (fp);
     fp = SCM_FRAME_DYNAMIC_LINK (fp);
-    COMPILER_BARRIER;
     NULLSTACK (old_sp - sp);
   }
   
@@ -84,7 +71,6 @@ VM_DEFINE_INSTRUCTION (3, dup, "dup", 0, 0, 1)
 {
   SCM x = *sp;
   PUSH (x);
-  DEAD (x);
   NEXT;
 }
 
@@ -227,7 +213,6 @@ VM_DEFINE_INSTRUCTION (18, vector, "vector", 2, -1, 1)
   memcpy (SCM_I_VECTOR_WELTS(vect), sp, sizeof(SCM) * len);
   NULLSTACK (len);
   *sp = vect;
-  DEAD (vect);
 
   NEXT;
 }
@@ -332,7 +317,6 @@ VM_DEFINE_INSTRUCTION (25, variable_ref, "variable-ref", 0, 1, 1)
     {
       SCM o = VARIABLE_REF (x);
       *sp = o;
-      DEAD (o);
     }
 
   NEXT;
@@ -350,20 +334,18 @@ VM_DEFINE_INSTRUCTION (26, variable_bound, "variable-bound?", 0, 1, 1)
     }
   else
     *sp = scm_from_bool (VARIABLE_BOUNDP (x));
-  DEAD (x);
   NEXT;
 }
 
 VM_DEFINE_INSTRUCTION (27, toplevel_ref, "toplevel-ref", 1, 0, 1)
 {
   unsigned objnum = FETCH ();
-  SCM what;
+  SCM what, resolved;
   CHECK_OBJECT (objnum);
   what = OBJECT_REF (objnum);
 
   if (!SCM_VARIABLEP (what))
     {
-      SCM resolved;
       SYNC_REGISTER ();
       resolved = resolve_variable (what, scm_program_module (program));
       if (!VARIABLE_BOUNDP (resolved))
@@ -372,18 +354,16 @@ VM_DEFINE_INSTRUCTION (27, toplevel_ref, "toplevel-ref", 1, 0, 1)
           goto vm_error_unbound;
         }
       what = resolved;
-      DEAD (resolved);
       OBJECT_SET (objnum, what);
     }
 
   PUSH (VARIABLE_REF (what));
-  DEAD (what);
   NEXT;
 }
 
 VM_DEFINE_INSTRUCTION (28, long_toplevel_ref, "long-toplevel-ref", 2, 0, 1)
 {
-  SCM what;
+  SCM what, resolved;
   unsigned int objnum = FETCH ();
   objnum <<= 8;
   objnum += FETCH ();
@@ -392,7 +372,6 @@ VM_DEFINE_INSTRUCTION (28, long_toplevel_ref, "long-toplevel-ref", 2, 0, 1)
 
   if (!SCM_VARIABLEP (what))
     {
-      SCM resolved;
       SYNC_REGISTER ();
       resolved = resolve_variable (what, scm_program_module (program));
       if (!VARIABLE_BOUNDP (resolved))
@@ -401,12 +380,10 @@ VM_DEFINE_INSTRUCTION (28, long_toplevel_ref, "long-toplevel-ref", 2, 0, 1)
           goto vm_error_unbound;
         }
       what = resolved;
-      DEAD (resolved);
       OBJECT_SET (objnum, what);
     }
 
   PUSH (VARIABLE_REF (what));
-  DEAD (what);
   NEXT;
 }
 
@@ -417,7 +394,6 @@ VM_DEFINE_INSTRUCTION (29, local_set, "local-set", 1, 1, 0)
   SCM x;
   POP (x);
   LOCAL_SET (FETCH (), x);
-  DEAD (x);
   NEXT;
 }
 
@@ -429,7 +405,6 @@ VM_DEFINE_INSTRUCTION (30, long_local_set, "long-local-set", 2, 1, 0)
   i += FETCH ();
   POP (x);
   LOCAL_SET (i, x);
-  DEAD (x);
   NEXT;
 }
 
@@ -461,7 +436,6 @@ VM_DEFINE_INSTRUCTION (32, toplevel_set, "toplevel-set", 1, 1, 0)
     }
 
   VARIABLE_SET (what, *sp);
-  DEAD (what);
   DROP ();
   NEXT;
 }
@@ -483,7 +457,6 @@ VM_DEFINE_INSTRUCTION (33, long_toplevel_set, "long-toplevel-set", 2, 1, 0)
     }
 
   VARIABLE_SET (what, *sp);
-  DEAD (what);
   DROP ();
   NEXT;
 }
@@ -510,6 +483,7 @@ VM_DEFINE_INSTRUCTION (33, long_toplevel_set, "long-toplevel-set", 2, 1, 0)
     ip += offset;                               \
   if (offset < 0)                               \
     VM_HANDLE_INTERRUPTS;                       \
+  NEXT;						\
 }
 
 VM_DEFINE_INSTRUCTION (34, br, "br", 3, 0, 0)
@@ -527,8 +501,6 @@ VM_DEFINE_INSTRUCTION (35, br_if, "br-if", 3, 0, 0)
   SCM x;
   POP (x);
   BR (scm_is_true (x));
-  DEAD (x);
-  NEXT;
 }
 
 VM_DEFINE_INSTRUCTION (36, br_if_not, "br-if-not", 3, 0, 0)
@@ -536,8 +508,6 @@ VM_DEFINE_INSTRUCTION (36, br_if_not, "br-if-not", 3, 0, 0)
   SCM x;
   POP (x);
   BR (scm_is_false (x));
-  DEAD (x);
-  NEXT;
 }
 
 VM_DEFINE_INSTRUCTION (37, br_if_eq, "br-if-eq", 3, 0, 0)
@@ -545,9 +515,6 @@ VM_DEFINE_INSTRUCTION (37, br_if_eq, "br-if-eq", 3, 0, 0)
   SCM x, y;
   POP2 (y, x);
   BR (scm_is_eq (x, y));
-  DEAD (x);
-  DEAD (y);
-  NEXT;
 }
 
 VM_DEFINE_INSTRUCTION (38, br_if_not_eq, "br-if-not-eq", 3, 0, 0)
@@ -555,9 +522,6 @@ VM_DEFINE_INSTRUCTION (38, br_if_not_eq, "br-if-not-eq", 3, 0, 0)
   SCM x, y;
   POP2 (y, x);
   BR (!scm_is_eq (x, y));
-  DEAD (x);
-  DEAD (y);
-  NEXT;
 }
 
 VM_DEFINE_INSTRUCTION (39, br_if_null, "br-if-null", 3, 0, 0)
@@ -565,8 +529,6 @@ VM_DEFINE_INSTRUCTION (39, br_if_null, "br-if-null", 3, 0, 0)
   SCM x;
   POP (x);
   BR (scm_is_null (x));
-  DEAD (x);
-  NEXT;
 }
 
 VM_DEFINE_INSTRUCTION (40, br_if_not_null, "br-if-not-null", 3, 0, 0)
@@ -574,8 +536,6 @@ VM_DEFINE_INSTRUCTION (40, br_if_not_null, "br-if-not-null", 3, 0, 0)
   SCM x;
   POP (x);
   BR (!scm_is_null (x));
-  DEAD (x);
-  NEXT;
 }
 
 
@@ -739,8 +699,6 @@ VM_DEFINE_INSTRUCTION (48, bind_kwargs, "bind-kwargs", 5, 0, 0)
         goto vm_error_kwargs_invalid_keyword;
     }
 
-  DEAD (kw);
-
   NEXT;
 }
 
@@ -758,7 +716,6 @@ VM_DEFINE_INSTRUCTION (49, push_rest, "push-rest", 2, -1, -1)
     /* No need to check for underflow. */
     CONS (rest, *sp--, rest);
   PUSH (rest);
-  DEAD (rest);
   NEXT;
 }
 
@@ -775,7 +732,6 @@ VM_DEFINE_INSTRUCTION (50, bind_rest, "bind-rest", 4, -1, -1)
     /* No need to check for underflow. */
     CONS (rest, *sp--, rest);
   LOCAL_SET (i, rest);
-  DEAD (rest);
   NEXT;
 }
 
@@ -966,7 +922,6 @@ VM_DEFINE_INSTRUCTION (55, subr_call, "subr-call", 1, -1, -1)
       abort ();
     }
   
-  DEAD (pointer);
   NULLSTACK_FOR_NONLOCAL_EXIT ();
       
   if (SCM_UNLIKELY (SCM_VALUESP (ret)))
@@ -975,13 +930,11 @@ VM_DEFINE_INSTRUCTION (55, subr_call, "subr-call", 1, -1, -1)
       ret = scm_struct_ref (ret, SCM_INUM0);
       nvalues = scm_ilength (ret);
       PUSH_LIST (ret, scm_is_null);
-      DEAD (ret);
       goto vm_return_values;
     }
   else
     {
       PUSH (ret);
-      DEAD (ret);
       goto vm_return;
     }
 }
@@ -1016,7 +969,6 @@ VM_DEFINE_INSTRUCTION (56, smob_call, "smob-call", 1, -1, -1)
       abort ();
     }
   
-  DEAD (smob);
   NULLSTACK_FOR_NONLOCAL_EXIT ();
       
   if (SCM_UNLIKELY (SCM_VALUESP (ret)))
@@ -1025,13 +977,11 @@ VM_DEFINE_INSTRUCTION (56, smob_call, "smob-call", 1, -1, -1)
       ret = scm_struct_ref (ret, SCM_INUM0);
       nvalues = scm_ilength (ret);
       PUSH_LIST (ret, scm_is_null);
-      DEAD (ret);
       goto vm_return_values;
     }
   else
     {
       PUSH (ret);
-      DEAD (ret);
       goto vm_return;
     }
 }
@@ -1047,7 +997,6 @@ VM_DEFINE_INSTRUCTION (57, foreign_call, "foreign-call", 1, -1, -1)
 
   ret = scm_i_foreign_call (foreign, sp - nargs + 1);
 
-  DEAD (foreign);
   NULLSTACK_FOR_NONLOCAL_EXIT ();
       
   if (SCM_UNLIKELY (SCM_VALUESP (ret)))
@@ -1056,13 +1005,11 @@ VM_DEFINE_INSTRUCTION (57, foreign_call, "foreign-call", 1, -1, -1)
       ret = scm_struct_ref (ret, SCM_INUM0);
       nvalues = scm_ilength (ret);
       PUSH_LIST (ret, scm_is_null);
-      DEAD (ret);
       goto vm_return_values;
     }
   else
     {
       PUSH (ret);
-      DEAD (ret);
       goto vm_return;
     }
 }
@@ -1079,7 +1026,7 @@ VM_DEFINE_INSTRUCTION (58, continuation_call, "continuation-call", 0, -1, 0)
                              sp - (fp - 1), fp);
   scm_i_reinstate_continuation (contregs);
 
-  /* no DEAD, no NEXT */
+  /* no NEXT */
   abort ();
 }
 
@@ -1089,15 +1036,12 @@ VM_DEFINE_INSTRUCTION (59, partial_cont_call, "partial-cont-call", 0, -1, 0)
   POP2 (intwinds, vmcont);
   SYNC_REGISTER ();
   if (SCM_UNLIKELY (!SCM_VM_CONT_REWINDABLE_P (vmcont)))
-    {
-      finish_args = vmcont;
+    { finish_args = vmcont;
       goto vm_error_continuation_not_rewindable;
     }
   prevwinds = scm_i_dynwinds ();
   vm_reinstate_partial_continuation (vm, vmcont, intwinds, sp + 1 - fp, fp,
                                      vm_cookie);
-  DEAD (vmcont);
-  DEAD (intwinds);
 
   /* Rewind prompt jmpbuffers, if any. */
   {
@@ -1105,9 +1049,7 @@ VM_DEFINE_INSTRUCTION (59, partial_cont_call, "partial-cont-call", 0, -1, 0)
     for (; !scm_is_eq (winds, prevwinds); winds = scm_cdr (winds))
       if (SCM_PROMPT_P (scm_car (winds)) && SCM_PROMPT_SETJMP (scm_car (winds)))
         break;
-    DEAD (winds);
   }
-  DEAD (prevwinds);
     
   CACHE_REGISTER ();
   program = SCM_FRAME_PROGRAM (fp);
@@ -1120,7 +1062,6 @@ VM_DEFINE_INSTRUCTION (60, tail_call_nargs, "tail-call/nargs", 0, 0, 1)
   SCM x;
   POP (x);
   nargs = scm_to_int (x);
-  DEAD (x);
   /* FIXME: should truncate values? */
   goto vm_tail_call;
 }
@@ -1130,7 +1071,6 @@ VM_DEFINE_INSTRUCTION (61, call_nargs, "call/nargs", 0, 0, 1)
   SCM x;
   POP (x);
   nargs = scm_to_int (x);
-  DEAD (x);
   /* FIXME: should truncate values? */
   goto vm_call;
 }
@@ -1205,7 +1145,6 @@ VM_DEFINE_INSTRUCTION (63, apply, "apply", 1, -1, 1)
     }
 
   PUSH_LIST (ls, SCM_NULL_OR_NIL_P);
-  DEAD (ls);
 
   nargs += len - 2;
   goto vm_call;
@@ -1228,7 +1167,6 @@ VM_DEFINE_INSTRUCTION (64, tail_apply, "tail-apply", 1, -1, 1)
     }
 
   PUSH_LIST (ls, SCM_NULL_OR_NIL_P);
-  DEAD (ls);
 
   nargs += len - 2;
   goto vm_tail_call;
@@ -1242,16 +1180,13 @@ VM_DEFINE_INSTRUCTION (65, call_cc, "call/cc", 0, 1, 1)
   SYNC_ALL ();
   vm_cont = scm_i_vm_capture_stack (vp->stack_base, fp, sp, ip, NULL, 0);
   cont = scm_i_make_continuation (&first, vm, vm_cont);
-  DEAD (vm_cont);
   if (first) 
     {
       PUSH (SCM_PACK (0)); /* dynamic link */
       PUSH (SCM_PACK (0));  /* mvra */
       PUSH (SCM_PACK (0));  /* ra */
       PUSH (proc);
-      DEAD (proc);
       PUSH (cont);
-      DEAD (cont);
       nargs = 1;
       goto vm_call;
     }
@@ -1264,8 +1199,6 @@ VM_DEFINE_INSTRUCTION (65, call_cc, "call/cc", 0, 1, 1)
 
          So, pull our regs back down from the vp, and march on to the
          next instruction. */
-      DEAD (proc);
-      DEAD (cont);
       CACHE_REGISTER ();
       program = SCM_FRAME_PROGRAM (fp);
       CACHE_PROGRAM ();
@@ -1289,20 +1222,15 @@ VM_DEFINE_INSTRUCTION (66, tail_call_cc, "tail-call/cc", 0, 1, 1)
                                     SCM_FRAME_MV_RETURN_ADDRESS (fp),
                                     0);
   cont = scm_i_make_continuation (&first, vm, vm_cont);
-  DEAD (vm_cont);
   if (first) 
     {
       PUSH (proc);
-      DEAD (proc);
       PUSH (cont);
-      DEAD (cont);
       nargs = 1;
       goto vm_tail_call;
     }
   else
     {
-      DEAD (proc);
-      DEAD (cont);
       /* Otherwise, cache regs and NEXT, as above. Invoking the continuation
          does a return from the frame, either to the RA or
          MVRA. */
@@ -1339,7 +1267,6 @@ VM_DEFINE_INSTRUCTION (67, return, "return", 0, 1, 1)
     sp = SCM_FRAME_LOWER_ADDRESS (fp);
     ip = SCM_FRAME_RETURN_ADDRESS (fp);
     fp = SCM_FRAME_DYNAMIC_LINK (fp);
-    COMPILER_BARRIER;
 
 #ifdef VM_ENABLE_STACK_NULLING
     NULLSTACK (old_sp - sp);
@@ -1347,8 +1274,6 @@ VM_DEFINE_INSTRUCTION (67, return, "return", 0, 1, 1)
 
     /* Set return value (sp is already pushed) */
     *sp = ret;
-
-    DEAD (ret);
   }
 
   /* Restore the last program */
@@ -1377,8 +1302,7 @@ VM_DEFINE_INSTRUCTION (68, return_values, "return/values", 1, -1, -1)
       sp = SCM_FRAME_LOWER_ADDRESS (fp) - 1;
       ip = SCM_FRAME_MV_RETURN_ADDRESS (fp);
       fp = SCM_FRAME_DYNAMIC_LINK (fp);
-      COMPILER_BARRIER;
-
+        
       /* Push return values, and the number of values */
       for (i = 0; i < nvalues; i++)
         *++sp = vals[i+1];
@@ -1398,8 +1322,7 @@ VM_DEFINE_INSTRUCTION (68, return_values, "return/values", 1, -1, -1)
       sp = SCM_FRAME_LOWER_ADDRESS (fp) - 1;
       ip = SCM_FRAME_RETURN_ADDRESS (fp);
       fp = SCM_FRAME_DYNAMIC_LINK (fp);
-      COMPILER_BARRIER;
-
+        
       /* Push first value */
       *++sp = vals[1];
              
@@ -1436,7 +1359,6 @@ VM_DEFINE_INSTRUCTION (69, return_values_star, "return/values*", 1, -1, -1)
     goto vm_error_improper_list;
   }
 
-  DEAD (l);
   goto vm_return_values;
 }
 
@@ -1445,7 +1367,6 @@ VM_DEFINE_INSTRUCTION (70, return_nvalues, "return/nvalues", 0, 1, -1)
   SCM n;
   POP (n);
   nvalues = scm_to_int (n);
-  DEAD (n);
   ASSERT (nvalues >= 0);
   goto vm_return_values;
 }
@@ -1456,7 +1377,6 @@ VM_DEFINE_INSTRUCTION (71, truncate_values, "truncate-values", 2, -1, -1)
   int nbinds, rest;
   POP (x);
   nvalues = scm_to_int (x);
-  DEAD (x);
   nbinds = FETCH ();
   rest = FETCH ();
 
@@ -1480,7 +1400,6 @@ VM_DEFINE_INSTRUCTION (72, box, "box", 1, 1, 0)
   POP (val);
   SYNC_BEFORE_GC ();
   LOCAL_SET (FETCH (), scm_cell (scm_tc7_variable, SCM_UNPACK (val)));
-  DEAD (val);
   NEXT;
 }
 
@@ -1502,7 +1421,6 @@ VM_DEFINE_INSTRUCTION (74, local_boxed_ref, "local-boxed-ref", 1, 0, 1)
   SCM v = LOCAL_REF (FETCH ());
   ASSERT_BOUND_VARIABLE (v);
   PUSH (VARIABLE_REF (v));
-  DEAD (v);
   NEXT;
 }
 
@@ -1513,8 +1431,6 @@ VM_DEFINE_INSTRUCTION (75, local_boxed_set, "local-boxed-set", 1, 1, 0)
   POP (val);
   ASSERT_VARIABLE (v);
   VARIABLE_SET (v, val);
-  DEAD (v);
-  DEAD (val);
   NEXT;
 }
 
@@ -1537,7 +1453,6 @@ VM_DEFINE_INSTRUCTION (77, free_boxed_ref, "free-boxed-ref", 1, 0, 1)
   v = FREE_VARIABLE_REF (idx);
   ASSERT_BOUND_VARIABLE (v);
   PUSH (VARIABLE_REF (v));
-  DEAD (v);
   NEXT;
 }
 
@@ -1550,8 +1465,6 @@ VM_DEFINE_INSTRUCTION (78, free_boxed_set, "free-boxed-set", 1, 1, 0)
   v = FREE_VARIABLE_REF (idx);
   ASSERT_BOUND_VARIABLE (v);
   VARIABLE_SET (v, val);
-  DEAD (v);
-  DEAD (val);
   NEXT;
 }
 
@@ -1570,7 +1483,6 @@ VM_DEFINE_INSTRUCTION (79, make_closure, "make-closure", 2, -1, 1)
   sp[-len] = closure;
   for (n = 0; n < len; n++)
     SCM_PROGRAM_FREE_VARIABLE_SET (closure, n, sp[-len + 1 + n]);
-  DEAD (closure);
   DROPN (len);
   NEXT;
 }
@@ -1596,7 +1508,6 @@ VM_DEFINE_INSTRUCTION (81, fix_closure, "fix-closure", 2, -1, 0)
   len = SCM_PROGRAM_NUM_FREE_VARIABLES (x);
   for (n = 0; n < len; n++)
     SCM_PROGRAM_FREE_VARIABLE_SET (x, n, sp[-len + 1 + n]);
-  DEAD (x);
   DROPN (len);
   NEXT;
 }
@@ -1609,8 +1520,6 @@ VM_DEFINE_INSTRUCTION (82, define, "define", 0, 0, 2)
   VARIABLE_SET (scm_sym2var (sym, scm_current_module_lookup_closure (),
                              SCM_BOOL_T),
                 val);
-  DEAD (sym);
-  DEAD (val);
   NEXT;
 }
 
@@ -1654,8 +1563,6 @@ VM_DEFINE_INSTRUCTION (85, prompt, "prompt", 4, 2, 0)
          vm_engine that can be assigned *has* been assigned. So we need to pull
          all our state back from the ip/fp/sp.
       */
-      DEAD (k);
-      DEAD (prompt);
       CACHE_REGISTER ();
       program = SCM_FRAME_PROGRAM (fp);
       CACHE_PROGRAM ();
@@ -1665,9 +1572,6 @@ VM_DEFINE_INSTRUCTION (85, prompt, "prompt", 4, 2, 0)
       NEXT;
     }
       
-  DEAD (k);
-  DEAD (prompt);
-  
   /* Otherwise setjmp returned for the first time, so we go to execute the
      prompt's body. */
   NEXT;
@@ -1692,8 +1596,6 @@ VM_DEFINE_INSTRUCTION (86, wind, "wind", 0, 2, 0)
       goto vm_error_not_a_thunk;
     }
   scm_i_set_dynwinds (scm_cons (scm_cons (wind, unwind), scm_i_dynwinds ()));
-  DEAD (wind);
-  DEAD (unwind);
   NEXT;
 }
 
@@ -1729,7 +1631,6 @@ VM_DEFINE_INSTRUCTION (89, wind_fluids, "wind-fluids", 1, -1, 0)
 
   scm_i_swap_with_fluids (wf, current_thread->dynamic_state);
   scm_i_set_dynwinds (scm_cons (wf, scm_i_dynwinds ()));
-  DEAD (wf);
   NEXT;
 }
 
@@ -1739,7 +1640,6 @@ VM_DEFINE_INSTRUCTION (90, unwind_fluids, "unwind-fluids", 0, 0, 0)
   wf = scm_car (scm_i_dynwinds ());
   scm_i_set_dynwinds (scm_cdr (scm_i_dynwinds ()));
   scm_i_swap_with_fluids (wf, current_thread->dynamic_state);
-  DEAD (wf);
   NEXT;
 }
 
@@ -1754,14 +1654,12 @@ VM_DEFINE_INSTRUCTION (91, fluid_ref, "fluid-ref", 0, 1, 1)
       || ((num = SCM_I_FLUID_NUM (*sp)) >= SCM_SIMPLE_VECTOR_LENGTH (fluids)))
     {
       /* Punt dynstate expansion and error handling to the C proc. */
-      DEAD (fluids);
       SYNC_REGISTER ();
       *sp = scm_fluid_ref (*sp);
     }
   else
     {
       SCM val = SCM_SIMPLE_VECTOR_REF (fluids, num);
-      DEAD (fluids);
       if (scm_is_eq (val, SCM_UNDEFINED))
         val = SCM_I_FLUID_DEFAULT (*sp);
       if (SCM_UNLIKELY (scm_is_eq (val, SCM_UNDEFINED)))
@@ -1791,9 +1689,7 @@ VM_DEFINE_INSTRUCTION (92, fluid_set, "fluid-set", 0, 2, 0)
     }
   else
     SCM_SIMPLE_VECTOR_SET (fluids, num, val);
-  DEAD (fluids);
-  DEAD (fluid);
-  DEAD (val);
+  
   NEXT;
 }
 
@@ -1817,7 +1713,6 @@ VM_DEFINE_INSTRUCTION (93, assert_nargs_ee_locals, "assert-nargs-ee/locals", 1, 
   NEXT;
 }
 
-#undef COMPILER_BARRIER
 
 /*
 (defun renumber-ops ()
